@@ -15,7 +15,8 @@
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
 
-
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 
 
@@ -185,263 +186,371 @@
             <a href="{{ url_for('dashboard', filter='latest', page=1) }}" class="styled-link">Go to Latest</a>
         </button>
         <button id="sortByHourBtn" class="styled-button" style="display: none;">Sort by Hour</button>
+        
+        
         <button id="sortByMinuteBtn" class="styled-button" style="display: none;">Sort by Minute</button>
+      
         <div id="currentDateTime" style="font-weight: bold; margin-top: 10px;"></div>
+        
        
     
       </div>
-    <div id="google-chart" style="width: 100%; height: 400px;"></div>
+
+<!-- Loading message -->
+<div id="loadingMessage" class="loading-message">Loading...</div>
+    <div id="plotly-chart" style="width: 100%; height: 400px;"></div>
+   
     <div id="noDataMessage" class="no-data-message">No data available for the selected range.</div>
     
     <script>
-        google.charts.load('current', {'packages':['corechart']});
-        google.charts.setOnLoadCallback(drawChart);
-    
-        function drawChart() {
-            var jsonData = $.ajax({
-                url: "/api/sensor_data",
-                dataType: "json",
-                async: false
-            }).responseText;
-    
-            var jsonDataParsed = JSON.parse(jsonData);
-    
-            var data = new google.visualization.DataTable();
-            data.addColumn('string', 'Time'); // x-axis label
-            data.addColumn('number', 'Liters'); // y-axis label
-    
-            // Determine the start index for the latest 10 entries
-            var startIndex = Math.max(0, jsonDataParsed.labels.length - 10);
-    
-            // Add the latest 10 entries to the DataTable
-            for (var i = startIndex; i < jsonDataParsed.labels.length; i++) {
-                data.addRow([jsonDataParsed.labels[i], jsonDataParsed.volumeLiters[i]]);
+       let zoomLevel = 10; // Initial zoom level
+    let jsonDataParsed = null; // Store parsed JSON data
+
+    function drawChart(data, layout) {
+      $('#loadingMessage').hide(); // Hide loading message
+      Plotly.newPlot('plotly-chart', data, layout);
+    }
+
+    function fetchDataAndDrawChart() {
+      $('#loadingMessage').show(); // Show loading message
+  
+      $.ajax({
+        url: "/api/sensor_data",
+        dataType: "json",
+        success: function(response) {
+          jsonDataParsed = response;
+
+          var data = [{
+            x: jsonDataParsed.labels.slice(-zoomLevel),
+            y: jsonDataParsed.volumeLiters.slice(-zoomLevel),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Liters'
+          }];
+
+          var layout = {
+            title: 'Fuel Consumption',
+            xaxis: {
+              title: 'Time'
+            },
+            yaxis: {
+              title: 'Liters'
             }
-    
-            var options = {
-                curveType: 'function',
-                legend: { position: 'bottom' },
-                lineWidth: 2,
-                hAxis: { title: 'Time' }, // x-axis title
-                vAxis: { title: 'Liters' }, // y-axis title
-                explorer: { 
-                actions: ['dragToZoom', 'rightClickToReset'], 
-                axis: 'horizontal', 
-                keepInBounds: true, 
-                maxZoomIn: 0.1 
-            }
-                
-            };
-    
-            var chart = new google.visualization.LineChart(document.getElementById('google-chart'));
-            chart.draw(data, options);
+          };
 
-
-            // Function to update the current date and time
-        function updateDateTime() {
-            var now = new Date();
-            var day = String(now.getDate()).padStart(2, '0');
-            var month = String(now.getMonth() + 1).padStart(2, '0'); // Months are zero-based
-            var year = now.getFullYear();
-            var hours = String(now.getHours()).padStart(2, '0');
-            var minutes = String(now.getMinutes()).padStart(2, '0');
-            var seconds = String(now.getSeconds()).padStart(2, '0');
-            var currentDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-
-            // Update the div with the current date and time
-            $('#currentDateTime').text('Current Date and Time: ' + currentDateTime);
+          drawChart(data, layout);
+        },
+        error: function() {
+          $('#noDataMessage').show();
+          $('#loadingMessage').hide(); // Hide loading message if error
         }
+      });
+    }
 
-        // Update the time initially and then every second
-        updateDateTime();
-        setInterval(updateDateTime, 1000);
+    function filterByDateRange(startDate, endDate) {
+      if (!jsonDataParsed) return;
 
-    
-            $('#filterByDateRangeBtn').on('click', function() {
-                var startDate = $('#startDatePicker').val();
-                var endDate = $('#endDatePicker').val();
-    
-                if (startDate && endDate) {
-                    var formattedStartDate = startDate.split('-').reverse().join('/');
-                    var formattedEndDate = endDate.split('-').reverse().join('/');
-    
-                    var filteredData = [];
-                    for (var i = 0; i < jsonDataParsed.labels.length; i++) {
-                        var currentDate = jsonDataParsed.labels[i].split(" ")[0].split('/').reverse().join('-');
-                        if (currentDate >= startDate && currentDate <= endDate) {
-                            filteredData.push([jsonDataParsed.labels[i], jsonDataParsed.volumeLiters[i]]);
-                        }
-                    }
-    
-                    var filteredDataTable = new google.visualization.DataTable();
-                    filteredDataTable.addColumn('string', 'Time');
-                    filteredDataTable.addColumn('number', 'Liters');
-                    filteredDataTable.addRows(filteredData);
-    
-                    if (filteredData.length === 0) {
-                        $('#noDataMessage').show();
-                        return;
-                    } else {
-                        $('#noDataMessage').hide();
-                    }
-    
-                    chart.draw(filteredDataTable, options);
-    
-                    if (startDate === endDate) {
-                        $('#startTimePicker').prop('disabled', false);
-                        $('#endTimePicker').prop('disabled', false);
-                        $('#filterByTimeRangeBtn').prop('disabled', false);
-                        $('#sortByHourBtn').show();
-                        $('#sortByMinuteBtn').show();
-                    } else {
-                        $('#startTimePicker').prop('disabled', true);
-                        $('#endTimePicker').prop('disabled', true);
-                        $('#filterByTimeRangeBtn').prop('disabled', true);
-                        $('#sortByHourBtn').hide();
-                        $('#sortByMinuteBtn').hide();
-                    }
-                } else {
-                    alert("Please select a valid date range.");
-                }
-            });
-    
-            $('#filterByTimeRangeBtn').on('click', function() {
-                var startDate = $('#startDatePicker').val();
-                var startTime = $('#startTimePicker').val();
-                var endDate = $('#endDatePicker').val();
-                var endTime = $('#endTimePicker').val();
-    
-                if (startDate && startTime && endDate && endTime && startDate === endDate) {
-                    var startDateTimeStr = `${startDate.split('/').reverse().join('-')} ${startTime}`;
-                    var endDateTimeStr = `${endDate.split('/').reverse().join('-')} ${endTime}`;
-    
-                    var filteredData = [];
-                    for (var i = 0; i < jsonDataParsed.labels.length; i++) {
-                        var dateTimeStr = jsonDataParsed.labels[i]; // Assuming format is "dd/mm/yyyy hh:mm:ss"
-    
-                        // Parse dateTimeStr to compare correctly
-                        var dateTimeParts = dateTimeStr.split(' ');
-                        var datePart = dateTimeParts[0].split('/').reverse().join('-'); // Convert dd/mm/yyyy to yyyy-mm-dd
-                        var timePart = dateTimeParts[1]; // hh:mm:ss
-    
-                        var currentDateTimeStr = `${datePart} ${timePart}`;
-    
-                        // Compare currentDateTimeStr against startDateTimeStr and endDateTimeStr
-                        if (currentDateTimeStr >= startDateTimeStr && currentDateTimeStr <= endDateTimeStr) {
-                            filteredData.push([dateTimeStr, jsonDataParsed.volumeLiters[i]]);
-                        }
-                    }
-    
-                    var filteredDataTable = new google.visualization.DataTable();
-                    filteredDataTable.addColumn('string', 'Time');
-                    filteredDataTable.addColumn('number', 'Liters');
-                    filteredDataTable.addRows(filteredData);
-    
-                    if (filteredData.length === 0) {
-                        $('#noDataMessage').show();
-                    } else {
-                        $('#noDataMessage').hide();
-                    }
-    
-                    chart.draw(filteredDataTable, options);
-                } else {
-                    alert("Please select a valid date and time range.");
-                }
-            });
-    
-            $('#sortByHourBtn').on('click', function() {
-                var startDate = $('#startDatePicker').val();
-                var endDate = $('#endDatePicker').val();
-    
-                if (startDate && endDate && startDate === endDate) {
-                    var filteredData = [];
-                    for (var i = 0; i < jsonDataParsed.labels.length; i++) {
-                        var dateTimeStr = jsonDataParsed.labels[i]; // Assuming format is "dd/mm/yyyy hh:mm:ss"
-                        var currentDate = dateTimeStr.split(" ")[0].split('/').reverse().join('-');
-                        if (currentDate === startDate) {
-                            filteredData.push([dateTimeStr, jsonDataParsed.volumeLiters[i]]);
-                        }
-                    }
-    
-                    var hourlyData = {};
-                    filteredData.forEach(function(row) {
-                        var time = row[0].split(' ')[1].split(':')[0]; // Extract the hour
-                        if (!hourlyData[time]) {
-                            hourlyData[time] = [];
-                        }
-                        hourlyData[time].push(row[1]);
-                    });
-    
-                    var expandedData = [];
-                    Object.keys(hourlyData).forEach(function(hour) {
-                        var sum = hourlyData[hour].reduce((a, b) => a + b, 0);
-                        var avg = sum / hourlyData[hour].length;
-                        expandedData.push([`${startDate.split('-').reverse().join('/')} ${hour}:00:00`, avg]);
-                    });
-    
-                    var expandedDataTable = new google.visualization.DataTable();
-                    expandedDataTable.addColumn('string', 'Time');
-                    expandedDataTable.addColumn('number', 'Liters');
-                    expandedDataTable.addRows(expandedData);
-    
-                    if (expandedData.length === 0) {
-                        $('#noDataMessage').show();
-                    } else {
-                        $('#noDataMessage').hide();
-                    }
-    
-                    chart.draw(expandedDataTable, options);
-                } else {
-                    alert("Please select a valid date range.");
-                }
-            });
-    
-            $('#sortByMinuteBtn').on('click', function() {
-                var startDate = $('#startDatePicker').val();
-                var endDate = $('#endDatePicker').val();
-    
-                if (startDate && endDate && startDate === endDate) {
-                    var filteredData = [];
-                    for (var i = 0; i < jsonDataParsed.labels.length; i++) {
-                    var dateTimeStr = jsonDataParsed.labels[i]; // Assuming format is "dd/mm/yyyy hh:mm:ss"
-                    var currentDate = dateTimeStr.split(" ")[0].split('/').reverse().join('-');
-                    if (currentDate === startDate) {
-                        filteredData.push([dateTimeStr, jsonDataParsed.volumeLiters[i]]);
-                    }
-                }
+      var filteredData = {
+        labels: [],
+        volumeLiters: []
+      };
 
-                var minuteData = {};
-                filteredData.forEach(function(row) {
-                    var time = row[0].split(' ')[1].split(':').slice(0, 2).join(':'); // Extract hh:mm
-                    if (!minuteData[time]) {
-                        minuteData[time] = [];
-                    }
-                    minuteData[time].push(row[1]);
-                });
+      for (var i = 0; i < jsonDataParsed.labels.length; i++) {
+        var currentDate = jsonDataParsed.labels[i].split(" ")[0].split('/').reverse().join('-');
+        if (currentDate >= startDate && currentDate <= endDate) {
+          filteredData.labels.push(jsonDataParsed.labels[i]);
+          filteredData.volumeLiters.push(jsonDataParsed.volumeLiters[i]);
+        }
+      }
 
-                var expandedData = [];
-                Object.keys(minuteData).forEach(function(minute) {
-                    var sum = minuteData[minute].reduce((a, b) => a + b, 0);
-                    var avg = sum / minuteData[minute].length;
-                    expandedData.push([`${startDate.split('-').reverse().join('/')} ${minute}:00`, avg]);
-                });
+      if (filteredData.labels.length === 0) {
+        $('#noDataMessage').show();
+      } else {
+        $('#noDataMessage').hide();
+        var data = [{
+          x: filteredData.labels,
+          y: filteredData.volumeLiters,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'Liters'
+        }];
 
-                var expandedDataTable = new google.visualization.DataTable();
-                expandedDataTable.addColumn('string', 'Time');
-                expandedDataTable.addColumn('number', 'Liters');
-                expandedDataTable.addRows(expandedData);
+        var layout = {
+          title: 'Fuel Consumption',
+          xaxis: {
+            title: 'Time'
+          },
+          yaxis: {
+            title: 'Liters'
+          }
+        };
 
-                if (expandedData.length === 0) {
-                    $('#noDataMessage').show();
-                } else {
-                    $('#noDataMessage').hide();
-                }
+        drawChart(data, layout);
 
-                chart.draw(expandedDataTable, options);
-            } else {
-                alert("Please select a valid date range.");
-            }
-        });
+        if (startDate === endDate) {
+          $('#startTimePicker').prop('disabled', false);
+          $('#endTimePicker').prop('disabled', false);
+          $('#filterByTimeRangeBtn').prop('disabled', false);
+          $('#sortByHourBtn').show();
+          $('#sortByMinuteBtn').show();
+        } else {
+          $('#startTimePicker').prop('disabled', true);
+          $('#endTimePicker').prop('disabled', true);
+          $('#filterByTimeRangeBtn').prop('disabled', true);
+          $('#sortByHourBtn').hide();
+          $('#sortByMinuteBtn').hide();
+        }
+      }
+    }
+
+    function filterByTimeRange(startDate, startTime, endDate, endTime) {
+      if (!jsonDataParsed) return;
+
+      var filteredData = {
+        labels: [],
+        volumeLiters: []
+      };
+
+      var startDateTimeStr = `${startDate.split('-').reverse().join('/')} ${startTime}`;
+      var endDateTimeStr = `${endDate.split('-').reverse().join('/')} ${endTime}`;
+
+      for (var i = 0; i < jsonDataParsed.labels.length; i++) {
+        var dateTimeStr = jsonDataParsed.labels[i]; // Assuming format is "dd/mm/yyyy hh:mm:ss"
+        if (dateTimeStr >= startDateTimeStr && dateTimeStr <= endDateTimeStr) {
+          filteredData.labels.push(jsonDataParsed.labels[i]);
+          filteredData.volumeLiters.push(jsonDataParsed.volumeLiters[i]);
+        }
+      }
+
+      if (filteredData.labels.length === 0) {
+        $('#noDataMessage').show();
+      } else {
+        $('#noDataMessage').hide();
+        var data = [{
+          x: filteredData.labels,
+          y: filteredData.volumeLiters,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'Liters'
+        }];
+
+        var layout = {
+          title: 'Fuel Consumption',
+          xaxis: {
+            title: 'Time'
+          },
+          yaxis: {
+            title: 'Liters'
+          }
+        };
+
+        drawChart(data, layout);
+      }
+    }
+
+    function sortByHour(date) {
+      if (!jsonDataParsed) return;
+
+      var filteredData = {
+        labels: [],
+        volumeLiters: []
+      };
+
+      for (var i = 0; i < jsonDataParsed.labels.length; i++) {
+        var dateTimeStr = jsonDataParsed.labels[i];
+        var currentDate = dateTimeStr.split(" ")[0].split('/').reverse().join('-');
+        if (currentDate === date) {
+          filteredData.labels.push(jsonDataParsed.labels[i]);
+          filteredData.volumeLiters.push(jsonDataParsed.volumeLiters[i]);
+        }
+      }
+
+      var hourlyData = {};
+      for (var i = 0; i < filteredData.labels.length; i++) {
+        var hour = filteredData.labels[i].split(" ")[1].split(":")[0];
+        if (!hourlyData[hour]) {
+          hourlyData[hour] = [];
+        }
+        hourlyData[hour].push(filteredData.volumeLiters[i]);
+      }
+
+      var sortedData = {
+        labels: [],
+        volumeLiters: []
+      };
+
+      for (var hour in hourlyData) {
+        var avgVolume = hourlyData[hour].reduce((a, b) => a + b, 0) / hourlyData[hour].length;
+        sortedData.labels.push(`${date.split('-').reverse().join('/')} ${hour}:00:00`);
+        sortedData.volumeLiters.push(avgVolume);
+      }
+
+      if (sortedData.labels.length === 0) {
+        $('#noDataMessage').show();
+      } else {
+        $('#noDataMessage').hide();
+        var data = [{
+          x: sortedData.labels,
+          y: sortedData.volumeLiters,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'Liters'
+        }];
+
+        var layout = {
+          title: 'Fuel Consumption',
+          xaxis: {
+            title: 'Time'
+          },
+          yaxis: {
+            title: 'Liters'
+          }
+        };
+
+        drawChart(data, layout);
+      }
+    }
+
+    function sortByMinute(date) {
+      if (!jsonDataParsed) return;
+
+      var filteredData = {
+        labels: [],
+        volumeLiters: []
+      };
+
+      for (var i = 0; i < jsonDataParsed.labels.length; i++) {
+        var dateTimeStr = jsonDataParsed.labels[i];
+        var currentDate = dateTimeStr.split(" ")[0].split('/').reverse().join('-');
+        if (currentDate === date) {
+          filteredData.labels.push(jsonDataParsed.labels[i]);
+          filteredData.volumeLiters.push(jsonDataParsed.volumeLiters[i]);
+        }
+      }
+
+      var minuteData = {};
+      for (var i = 0; i < filteredData.labels.length; i++) {
+        var time = filteredData.labels[i].split(" ")[1];
+        var hourMinute = time.split(":").slice(0, 2).join(":");
+        if (!minuteData[hourMinute]) {
+          minuteData[hourMinute] = [];
+        }
+        minuteData[hourMinute].push(filteredData.volumeLiters[i]);
+      }
+
+      var sortedData = {
+        labels: [],
+        volumeLiters: []
+      };
+
+      for (var hourMinute in minuteData) {
+        var avgVolume = minuteData[hourMinute].reduce((a, b) => a + b, 0) / minuteData[hourMinute].length;
+        sortedData.labels.push(`${date.split('-').reverse().join('/')} ${hourMinute}:00`);
+        sortedData.volumeLiters.push(avgVolume);
+      }
+
+      if (sortedData.labels.length === 0) {
+        $('#noDataMessage').show();
+      } else {
+        $('#noDataMessage').hide();
+        var data = [{
+          x: sortedData.labels,
+          y: sortedData.volumeLiters,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: 'Liters'
+        }];
+
+        var layout = {
+          title: 'Fuel Consumption',
+          xaxis: {
+            title: 'Time'
+          },
+          yaxis: {
+            title: 'Liters'
+          }
+        };
+
+        drawChart(data, layout);
+      }
+    }
+
+    $(document).ready(function() {
+      $('#loadingMessage').show(); // Show loading message initially
+      fetchDataAndDrawChart();
+
+      // Zoom in function
+      $('#zoomInBtn').click(function() {
+        if (zoomLevel > 1) {
+          zoomLevel--;
+          fetchDataAndDrawChart();
+        }
+      });
+
+      // Zoom out function
+      $('#zoomOutBtn').click(function() {
+        if (jsonDataParsed && zoomLevel < jsonDataParsed.labels.length) {
+          zoomLevel++;
+          fetchDataAndDrawChart();
+        }
+      });
+
+      // Function to update the current date and time
+      function updateDateTime() {
+        var now = new Date();
+        var day = String(now.getDate()).padStart(2, '0');
+        var month = String(now.getMonth() + 1).padStart(2, '0'); // Months are zero-based
+        var year = now.getFullYear();
+        var hours = String(now.getHours()).padStart(2, '0');
+        var minutes = String(now.getMinutes()).padStart(2, '0');
+        var seconds = String(now.getSeconds()).padStart(2, '0');
+        var currentDateTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+
+        // Update the div with the current date and time
+        $('#currentDateTime').text('Current Date and Time: ' + currentDateTime);
+      }
+
+      // Update the time initially and then every second
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+
+      // Filter by date range logic
+      $('#filterByDateRangeBtn').on('click', function() {
+        var startDate = $('#startDatePicker').val();
+        var endDate = $('#endDatePicker').val();
+
+        if (startDate && endDate) {
+          filterByDateRange(startDate, endDate);
+        } else {
+          alert("Please select a valid date range.");
+        }
+      });
+
+      // Filter by time range logic
+      $('#filterByTimeRangeBtn').on('click', function() {
+        var startDate = $('#startDatePicker').val();
+        var startTime = $('#startTimePicker').val();
+        var endDate = $('#endDatePicker').val();
+        var endTime = $('#endTimePicker').val();
+
+        if (startTime && endTime) {
+          filterByTimeRange(startDate, startTime, endDate, endTime);
+        } else {
+          alert("Please select a valid time range.");
+        }
+      });
+
+      // Sort by hour logic
+      $('#sortByHourBtn').on('click', function() {
+        var startDate = $('#startDatePicker').val();
+        sortByHour(startDate);
+      });
+
+      // Sort by minute logic
+      $('#sortByMinuteBtn').on('click', function() {
+        var startDate = $('#startDatePicker').val();
+        sortByMinute(startDate);
+      });
 
         $('#goToLatestBtn').on('click', function() {
             // Redraw with only the latest 10 entries
@@ -455,7 +564,7 @@
 
             chart.draw(latestData, options);
         });
-    }
+    } );
 </script>
 
       
@@ -550,4 +659,3 @@
 </body>
 </html>
 
-            
