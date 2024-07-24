@@ -497,3 +497,14 @@ border-radius: 4px;
 .styled-link:hover {
   text-decoration: none; /* Adds underline on hover */
 }
+
+
+
+
+.loading-message {
+  text-align: center;
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 100px;
+ 
+}
