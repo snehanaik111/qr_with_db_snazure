@@ -261,28 +261,44 @@ def api_login():
         return jsonify({"message": "Login successful"}), 200
     return jsonify({"message": "Invalid credentials"}), 401
 
+
 @app.route('/dashboard')
 def dashboard():
     if 'email' in session:
         user = User.query.filter_by(email=session['email']).first()
         filter_option = request.args.get('filter', 'latest')
         page = request.args.get('page', 1, type=int)
-        search_query = request.args.get('query')
+        search_query = request.args.get('query', '')
+
+        query = LevelSensorData.query
 
         if search_query:
-            sense_data_pagination = LevelSensorData.query.filter(
-                (LevelSensorData.date.like(f'%{search_query}%')) |
-                (LevelSensorData.full_addr.like(f'%{search_query}%')) |
-                (LevelSensorData.sensor_data.like(f'%{search_query}%')) |
-                (LevelSensorData.imei.like(f'%{search_query}%'))
-            ).order_by(LevelSensorData.date.desc()).paginate(page=page, per_page=10)
-        else:
-            if filter_option == 'oldest':
-                sense_data_pagination = LevelSensorData.query.order_by(LevelSensorData.date.asc()).paginate(page=page, per_page=10)
-            else:
-                sense_data_pagination = LevelSensorData.query.order_by(LevelSensorData.date.desc()).paginate(page=page, per_page=10)
+            # Split search_query to handle numerical and textual searches
+            try:
+                search_id = int(search_query)
+                query = query.filter(
+                    (LevelSensorData.id == search_id) |
+                    (LevelSensorData.date.like(f'%{search_query}%')) |
+                    (LevelSensorData.full_addr.like(f'%{search_query}%')) |
+                    (LevelSensorData.sensor_data.like(f'%{search_query}%')) |
+                    (LevelSensorData.vehicleno.like(f'%{search_query}%'))
+                )
+            except ValueError:
+                query = query.filter(
+                    (LevelSensorData.date.like(f'%{search_query}%')) |
+                    (LevelSensorData.full_addr.like(f'%{search_query}%')) |
+                    (LevelSensorData.sensor_data.like(f'%{search_query}%')) |
+                    (LevelSensorData.vehicleno.like(f'%{search_query}%'))
+                )
 
+        if filter_option == 'oldest':
+            query = query.order_by(LevelSensorData.date.asc())
+        else:
+            query = query.order_by(LevelSensorData.date.desc())
+        
+        sense_data_pagination = query.paginate(page=page, per_page=10)
         sense_data = sense_data_pagination.items
+
         for data_point in sense_data:
             data_point.volume_liters = get_volume(data_point.sensor_data)
 
@@ -292,8 +308,12 @@ def dashboard():
             sense_data=sense_data,
             filter_option=filter_option,
             pagination=sense_data_pagination,
+            search_query=search_query
         )
     return redirect('/login')
+
+
+
 
 @app.route('/logout')
 def logout():
@@ -408,24 +428,46 @@ def api_no_of_devices_active():
 
 @app.route('/search', methods=['GET'])
 def search_sensor_data():
-    query = request.args.get('query')
+    query = request.args.get('query', '')
     page = request.args.get('page', 1, type=int)
 
+    query_obj = LevelSensorData.query
+
     if query:
-        sense_data_pagination = LevelSensorData.query.filter(
-            (LevelSensorData.date.like(f'%{query}%')) |
-            (LevelSensorData.full_addr.like(f'%{query}%')) |
-            (LevelSensorData.sensor_data.like(f'%{query}%')) |
-            (LevelSensorData.imei.like(f'%{query}%'))
-        ).paginate(page=page, per_page=10)
-        sense_data = sense_data_pagination.items
-    else:
-        sense_data_pagination = LevelSensorData.query.paginate(page=page, per_page=10)
-        sense_data = sense_data_pagination.items
+        # Split search_query to handle numerical and textual searches
+        try:
+            search_id = int(query)
+            query_obj = query_obj.filter(
+                (LevelSensorData.id == search_id) |
+                (LevelSensorData.date.like(f'%{query}%')) |
+                (LevelSensorData.full_addr.like(f'%{query}%')) |
+                (LevelSensorData.sensor_data.like(f'%{query}%')) |
+                (LevelSensorData.vehicleno.like(f'%{query}%'))
+            )
+        except ValueError:
+            query_obj = query_obj.filter(
+                (LevelSensorData.date.like(f'%{query}%')) |
+                (LevelSensorData.full_addr.like(f'%{query}%')) |
+                (LevelSensorData.sensor_data.like(f'%{query}%')) |
+                (LevelSensorData.vehicleno.like(f'%{query}%'))
+            )
+    
+    # Ensure an ORDER BY clause is applied
+    query_obj = query_obj.order_by(LevelSensorData.date.desc())
+
+    sense_data_pagination = query_obj.paginate(page=page, per_page=10)
+    sense_data = sense_data_pagination.items
 
     user = User.query.filter_by(email=session.get('email')).first()
 
-    return render_template('dashboard.html', user=user, sense_data=sense_data, pagination=sense_data_pagination)
+    return render_template(
+        'dashboard.html',
+        user=user,
+        sense_data=sense_data,
+        pagination=sense_data_pagination,
+        search_query=query
+    )
+
 
 # Fetch the volume from the conversion table
 def get_volume(sensor_data):
