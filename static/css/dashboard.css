@@ -430,9 +430,10 @@ border-radius: 4px;
 
 #filtertab {
 	float: right;
-	margin-bottom: 20px;
+	margin-bottom: 10px;
 }
 #seachtab form, #filtertab form {
+
 	display: flex;
 }
 #seachtab input {
@@ -508,3 +509,29 @@ border-radius: 4px;
   margin-top: 100px;
  
 }
+
+#seachtab form button,
+#filtertab button {
+    width: 100px; /* Adjust the width as needed */
+    height: 38px; /* Adjust the height as needed */
+    margin-bottom: 10px;
+}
+
+#seachtab,
+#filtertab {
+    display: inline-block;
+    vertical-align: top;
+    margin: 5px;
+}
+
+#seachtab form input {
+    height: 38px; /* Adjust height to match the buttons */
+}
+
+
+.filter-message {
+  margin-top: 15px; /* Ensure no extra margin around the <p> tags */
+}
+
+
+
