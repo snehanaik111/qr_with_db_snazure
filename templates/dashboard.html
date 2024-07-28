@@ -570,7 +570,7 @@
       
         
         
-  
+  <br>
       <br>
       <h2>Sensor Data Receiver</h2>
       <div class="table-responsive">
@@ -590,10 +590,12 @@
           </div>
         </div>
         {% if filter_option == 'latest' %}
-        <p>Displaying the latest entries</p>
+        <p class="filter-message">Displaying the latest entries</p>
         {% elif filter_option == 'oldest' %}
-        <p>Displaying the oldest entries</p>
+        <p class="filter-message">Displaying the oldest entries</p>
         {% endif %}
+        
+       
         <table class="table table-bordered">
           <thead>
             <tr>
