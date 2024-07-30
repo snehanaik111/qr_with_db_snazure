@@ -171,10 +171,56 @@
       <br>
 
 
+  
+
 
       
       <div id="google-chart-container">
+
+
+  <!--For test data simulation-->
+  <button id="stop-simulation" class="styled-button1">Stop</button>
+
+  <button id="start-simulation" class="styled-button2">Start Simulation</button>
+  
+  <script>
+    $(document).ready(function() {
+        $('#start-simulation').on('click', function() {
+            $.ajax({
+                url: '/start_simulation',
+                method: 'POST',
+                success: function(response) {
+                    alert(response.message);
+                },
+                error: function(error) {
+                    alert('Error starting simulation: ' + error.responseJSON.message);
+                }
+            });
+        });
+
+        $('#stop-simulation').on('click', function() {
+            $.ajax({
+                url: '/stop_simulation',
+                method: 'POST',
+                success: function(response) {
+                    alert(response.message);
+                },
+                error: function(error) {
+                    alert('Error stopping simulation: ' + error.responseJSON.message);
+                }
+            });
+        });
+    });
+</script>
+
+
+
+
+
         <h2>Fuel Consumption Line Chart</h2>
+
+
+
         <br>
         <input type="date" id="startDatePicker" title="Select Start Date">
         <input type="date" id="endDatePicker" title="Select End Date">
