@@ -14,6 +14,12 @@ import urllib.parse
 from datetime import datetime
 import pyodbc
 import traceback 
+
+
+import random
+import threading
+import time
+
 # Load environment variables from .env file
 
 
@@ -539,6 +545,55 @@ def generate_qr(id):
 def scan_qr(vehicleno):
     record = LevelSensorData.query.filter_by(vehicleno=vehicleno).first_or_404()
     return redirect(url_for('generate_pdf', id=record.id))
+
+
+
+
+#create a simulation button
+
+simulation_thread = None
+simulation_running = False
+
+
+def run_simulation():
+    global simulation_running
+    while simulation_running:
+        # Simulation logic: generate random data
+        test_data = {
+            'D': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'address': '400001', 
+            'data': [random.randint(50, 200)],  # Random data between 50 and 200
+            'Vehicle no': '0448'
+        }
+        # Send test data to your existing endpoint
+        with app.test_client() as client:
+            response = client.post('/level_sensor_data', json={'level_sensor_data': json.dumps(test_data)})
+            print(f'Simulation data sent: {response.json}')
+        time.sleep(60)  # Adjust the interval as needed
+
+@app.route('/start_simulation', methods=['POST'])
+def start_simulation():
+    global simulation_thread, simulation_running
+    if simulation_running:
+        return jsonify({'message': 'Simulation already running'}), 400
+
+    simulation_running = True
+    simulation_thread = threading.Thread(target=run_simulation)
+    simulation_thread.start()
+    return jsonify({'message': 'Simulation started successfully'}), 200
+
+@app.route('/stop_simulation', methods=['POST'])
+def stop_simulation():
+    global simulation_running
+    if not simulation_running:
+        return jsonify({'message': 'No simulation running'}), 400
+
+    simulation_running = False
+    simulation_thread.join()
+    return jsonify({'message': 'Simulation stopped successfully'}), 200
+
+
+
 
 if __name__ == '__main__':
     
